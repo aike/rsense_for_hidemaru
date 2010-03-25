@@ -1,0 +1,127 @@
+// rsense_complete.mac - RSense client for Hidemaru Editor
+//
+// Copyright (C) 2010 aike. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+$rsense_command = "ruby c:/rsense-0.2/bin/rsense";
+
+call CheckCharset;
+if (updated) {
+	save;
+}
+call GetPeriodPos;
+#pos = ##return;
+if (#pos > 0) {
+	call GetCharsetString;
+	$charset = $$return;
+	call GetPrefix #pos;
+	$prefix = $$return;
+	if ($prefix == "") {
+		#pos = #pos + 1;
+	}
+	call RsenseGetMethod filename3, $charset, lineno, #pos, $prefix;
+	call ReplaceMethod ##return, #pos;
+}
+endmacro;
+
+CheckCharset:
+	##code = charset & 0x3F;
+	if ((##code != 1) && (##code != 6)) {
+		message "ERROR: encoding must be Shift_JIS or UTF-8.";
+		endmacro;
+	}
+	##linebreak = charset & 0xC0;
+	if (##linebreak != 0x40) {
+		message "ERROR: linebreak code must be LF.";
+		endmacro;
+	}
+
+GetCharsetString:
+	##code = charset & 0x3F;
+	if (##code == 1) { return "SJIS"; }
+	return "UTF-8";
+
+GetPeriodPos:
+	##c = column;
+	##l = lineno;
+	##pos = -1;
+	left;
+	while (column > 0) {
+		if ((code == 0x20) || (code == 0x09)) {
+			break;
+		}
+		if (code == 0x2E) { // '.'
+			##pos = column;
+			break;
+		}
+		left;
+	}
+	movetolineno ##c + 1, ##l;
+	return ##pos;
+
+GetPrefix:
+	return gettext2(##1 + 1, lineno, column, lineno);
+
+RsenseGetMethod:
+	$$pos = str(##3) + ":" + str(##4);
+	#hSource = hidemaruhandle(0);
+	newfile;
+	showwindow 0;
+	#hTemp = hidemaruhandle(0);
+	run $rsense_command + " code-completion"
+		+ " --file=" + $$1
+		+ " --encoding=" + $$2
+		+ " --location=" + $$pos
+		+ " --format=plain";
+	if ($$5 != "") {
+		#hTemp2 = #hTemp;
+		localgrep "completion: " + $$5, casesense, noregular, nohilight;
+		showwindow 0;
+		#hTemp = hidemaruhandle(0);
+		closehidemaruforced #hTemp2;
+	}
+
+	replaceallfast ".*completion: ([^ ]+) .*", "\\1", casesense, regular;
+
+	moveto 0, 0;
+	while (code != eof) {
+		golineend2;
+		$rsense_menu[y] = gettext(0, y, x, y);
+		down;
+	}
+	##cnt = y;
+
+	setactivehidemaru #hSource;
+	closehidemaruforced #hTemp;
+
+	menuarray $rsense_menu, ##cnt;
+	return result;
+
+ReplaceMethod:
+	if (##1 <= 0) {
+		return;
+	}
+	while (((code >= 0x30) && (code <= 0x5A))
+	    || ((code >= 0x61) && (code <= 0x7A))
+	    || (code == 0x21)
+	    || (code == 0x5f)) {
+		right;
+	}
+	while (column >= ##2 + 2) {
+		backspace;
+	}
+	insert $rsense_menu[##1 - 1];
+	return;
+

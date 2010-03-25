@@ -1,0 +1,66 @@
+// rsense_type_help.mac - RSense client for Hidemaru Editor
+//
+// Copyright (C) 2010 aike. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+$rsense_command = "ruby c:/rsense-0.2/bin/rsense";
+
+call CheckCharset;
+if (updated) {
+	save;
+}
+call GetCharsetString;
+$charset = $$return;
+call RsenseGetTypeInfo filename3, $charset, lineno, column;
+endmacro;
+
+CheckCharset:
+	##code = charset & 0x3F;
+	if ((##code != 1) && (##code != 6)) {
+		message "ERROR: encoding must be Shift_JIS or UTF-8.";
+		endmacro;
+	}
+	##linebreak = charset & 0xC0;
+	if (##linebreak != 0x40) {
+		message "ERROR: linebreak code must be LF.";
+		endmacro;
+	}
+
+GetCharsetString:
+	##code = charset & 0x3F;
+	if (##code == 1) { return "SJIS"; }
+	return "UTF-8";
+
+RsenseGetTypeInfo:
+	$$pos = str(##3) + ":" + str(##4);
+	#hSource = hidemaruhandle(0);
+	newfile;
+	showwindow 0;
+	#hTemp = hidemaruhandle(0);
+	run $rsense_command + " type-inference"
+		+ " --file=" + $$1
+		+ " --encoding=" + $$2
+		+ " --location=" + $$pos
+		+ " --format=plain";
+	left;
+	$rmenu[0] = gettext(6, 0, x, y);
+	if ($rmenu[0] == "") {
+		$rmenu[0] = "No type information";
+	}
+	setactivehidemaru #hSource;
+	closehidemaruforced #hTemp;
+	menuarray $rmenu, 1;
+	return;
+
